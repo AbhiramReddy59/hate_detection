@@ -1,0 +1,173 @@
+Model Selection: Logistic Regression
+Why Logistic Regression?
+Text Classification: Logistic Regression is widely used for binary classification tasks, including text classification. It's a linear model that works well with features like TF-IDF vectors.
+Simplicity and Speed: Logistic Regression is relatively simple and fast to train, especially compared to more complex models like RandomForest or deep learning models.
+Interpretability: The output is easy to interpret, as it provides probabilities that can be directly used to gauge confidence in predictions.
+Libraries Used:
+pandas, numpy: For handling data and numerical operations.
+scikit-learn: For model training, feature extraction, and evaluation.
+joblib: For saving and loading the trained model and vectorizer.
+re: For text preprocessing using regular expressions.
+Flask, Flask-CORS: To create a REST API for serving the model.
+Purpose: This function cleans the input text by:
+Removing non-alphabetic characters (e.g., punctuation, numbers).
+Converting text to lowercase.
+Splitting and rejoining the text to ensure consistent spacing.
+Importance: Consistent text formatting helps the model generalize better.
+Purpose: Loads the dataset and preprocesses the text.
+Key Points:
+Drops rows with missing values in the 'Content' or 'Label' columns.
+Applies the preprocess_text function to each text entry.
+Output: Returns the processed text and labels as lists.
+Steps:
+Data Splitting: The dataset is split into training (80%) and validation (20%) sets.
+Feature Extraction (TF-IDF):
+TfidfVectorizer converts text into numerical features using Term Frequency-Inverse Document Frequency.
+The ngram_range=(1, 2) allows the model to consider both individual words (unigrams) and pairs of consecutive words (bigrams).
+Class Weights: The model accounts for class imbalance using computed class weights.
+Model Training: A LogisticRegression model is trained using the processed TF-IDF features and class weights.
+Validation: The model is evaluated on the validation set, with results printed to assess performance.
+Saving the Model: The trained model and vectorizer are saved using joblib for later use.
+
+Certainly! Let's break down the code I provided in detail, focusing on the model used, how the code works, and what each part is doing.
+
+1. Model Selection: Logistic Regression
+Why Logistic Regression?
+Text Classification: Logistic Regression is widely used for binary classification tasks, including text classification. It's a linear model that works well with features like TF-IDF vectors.
+Simplicity and Speed: Logistic Regression is relatively simple and fast to train, especially compared to more complex models like RandomForest or deep learning models.
+Interpretability: The output is easy to interpret, as it provides probabilities that can be directly used to gauge confidence in predictions.
+2. Code Breakdown
+a. Imports and Setup
+python
+Copy code
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import classification_report
+from sklearn.utils.class_weight import compute_class_weight
+import joblib
+import re
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import os
+Libraries Used:
+pandas, numpy: For handling data and numerical operations.
+scikit-learn: For model training, feature extraction, and evaluation.
+joblib: For saving and loading the trained model and vectorizer.
+re: For text preprocessing using regular expressions.
+Flask, Flask-CORS: To create a REST API for serving the model.
+b. Text Preprocessing
+python
+Copy code
+def preprocess_text(text):
+    if not isinstance(text, str):
+        return ""
+    text = re.sub(r'[^a-zA-Z\s]', '', text.lower())
+    return ' '.join(text.split())
+Purpose: This function cleans the input text by:
+Removing non-alphabetic characters (e.g., punctuation, numbers).
+Converting text to lowercase.
+Splitting and rejoining the text to ensure consistent spacing.
+Importance: Consistent text formatting helps the model generalize better.
+c. Loading and Preprocessing Data
+python
+Copy code
+def load_and_preprocess_data(file_path):
+    df = pd.read_csv(file_path)
+    df.dropna(subset=['Content', 'Label'], inplace=True)
+    df['Content'] = df['Content'].apply(preprocess_text)
+    return df['Content'].tolist(), df['Label'].tolist()
+Purpose: Loads the dataset and preprocesses the text.
+Key Points:
+Drops rows with missing values in the 'Content' or 'Label' columns.
+Applies the preprocess_text function to each text entry.
+Output: Returns the processed text and labels as lists.
+d. Model Training
+python
+Copy code
+def train_model():
+    try:
+        texts, labels = load_and_preprocess_data('HateSpeechDataset.csv')
+        train_texts, val_texts, train_labels, val_labels = train_test_split(
+            texts, labels, test_size=0.2, random_state=42
+        )
+
+        vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1, 2))
+        train_vectors = vectorizer.fit_transform(train_texts)
+        val_vectors = vectorizer.transform(val_texts)
+
+        class_weights = compute_class_weight('balanced', classes=np.unique(train_labels), y=train_labels)
+        class_weight_dict = dict(zip(np.unique(train_labels), class_weights))
+
+        model = LogisticRegression(random_state=42, class_weight=class_weight_dict, max_iter=1000)
+        model.fit(train_vectors, train_labels)
+
+        val_predictions = model.predict(val_vectors)
+        print('Validation Performance:')
+        print(classification_report(val_labels, val_predictions))
+
+        joblib.dump(model, 'content_moderation_model.joblib')
+        joblib.dump(vectorizer, 'vectorizer.joblib')
+
+        return model, vectorizer
+
+    except Exception as e:
+        print(f"An error occurred during training: {str(e)}")
+        return None, None
+Steps:
+Data Splitting: The dataset is split into training (80%) and validation (20%) sets.
+Feature Extraction (TF-IDF):
+TfidfVectorizer converts text into numerical features using Term Frequency-Inverse Document Frequency.
+The ngram_range=(1, 2) allows the model to consider both individual words (unigrams) and pairs of consecutive words (bigrams).
+Class Weights: The model accounts for class imbalance using computed class weights.
+Model Training: A LogisticRegression model is trained using the processed TF-IDF features and class weights.
+Validation: The model is evaluated on the validation set, with results printed to assess performance.
+Saving the Model: The trained model and vectorizer are saved using joblib for later use.
+e. Prediction and Mitigation
+python
+Copy code
+def predict_and_mitigate(text, model, vectorizer):
+    try:
+        preprocessed_text = preprocess_text(text)
+        vector = vectorizer.transform([preprocessed_text])
+        probabilities = model.predict_proba(vector)[0]
+
+        prob_hate_speech = probabilities[1]
+        confidence_threshold = 0.5
+        prediction = "Hate speech" if prob_hate_speech > confidence_threshold else "Not hate speech"
+        confidence = prob_hate_speech if prediction == "Hate speech" else 1 - prob_hate_speech
+
+        offensive_words = ["retard", "nazi", "vagina"]  # Add more words as needed
+        if prediction == "Hate speech":
+            for word in offensive_words:
+                text = re.sub(r'\b{}\b'.format(word), '[redacted]', text, flags=re.IGNORECASE)
+            warning = "Warning: This content has been flagged for containing potentially harmful language."
+            text = warning + "\n" + text
+
+        return prediction, confidence, prob_hate_speech, text
+    except Exception as e:
+        print(f"An error occurred during prediction: {str(e)}")
+        return "Error", 0.0, 0.0, text
+Prediction:
+The input text is preprocessed and transformed into a vector using the saved TF-IDF vectorizer.
+The predict_proba method is used to get the probability that the text is hate speech.
+A threshold (0.5) is used to classify the text as hate speech or not.
+Mitigation:
+Offensive words (like "retard", "nazi", "vagina") are replaced with [redacted] if the text is classified as hate speech.
+A warning message is prepended to the mitigated text.
+API Setup:
+Flask and CORS: A Flask app is created with Cross-Origin Resource Sharing (CORS) enabled for the specified origin.
+API Endpoint: The /analyze endpoint accepts POST requests with text data, predicts whether the text is hate speech, and returns the results in JSON format.
+Model Loading: The model and vectorizer are loaded from files if they exist; otherwise, the model is trained.
+3. Model Summary
+Logistic Regression: A linear classifier that predicts the probability of a sample belonging to a particular class (hate speech or not). It is simple, interpretable, and performs well with high-dimensional data like TF-IDF vectors.
+
+TF-IDF Vectorizer: Converts text data into numerical features by considering both the frequency of a word in a document and how common the word is across all documents. This helps in emphasizing important words while downplaying common but less informative ones.
+
+4. Performance and Usage
+Accuracy and Speed: Logistic Regression with TF-IDF is a balanced approach that offers reasonable accuracy while being computationally efficient. It’s faster to train and predict compared to more complex models, making it suitable for real-time applications like this API.
+Adaptability: The code is adaptable; you can easily switch to a different model (e.g., SVM) or enhance the feature extraction process.
+Conclusion
+This implementation provides a robust, efficient, and straightforward way to detect and mitigate hate speech using Logistic Regression. It's designed to

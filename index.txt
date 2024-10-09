@@ -1,0 +1,55 @@
+import React, { useState } from 'react';
+import { AlertCircle, CheckCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+
+const ContentModerationUI = () => {
+  const [text, setText] = useState('');
+  const [result, setResult] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    
+    // In a real application, you would make an API call to your backend here
+    // For this example, we'll simulate an API call with a timeout
+    setTimeout(() => {
+      const mockResult = Math.random() > 0.5 
+        ? { classification: "Not hate speech", confidence: 0.85 }
+        : { classification: "Hate speech", confidence: 0.92 };
+      setResult(mockResult);
+      setIsLoading(false);
+    }, 1000);
+  };
+
+  return (
+    <div className="max-w-md mx-auto mt-10 p-6 bg-white rounded-lg shadow-lg">
+      <h1 className="text-2xl font-bold mb-4">Content Moderation</h1>
+      <form onSubmit={handleSubmit}>
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Enter text to analyze..."
+          className="w-full mb-4"
+          rows={4}
+        />
+        <Button type="submit" disabled={isLoading || !text}>
+          {isLoading ? 'Analyzing...' : 'Analyze'}
+        </Button>
+      </form>
+      {result && (
+        <Alert className="mt-4" variant={result.classification === "Not hate speech" ? "default" : "destructive"}>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>{result.classification}</AlertTitle>
+          <AlertDescription>
+            Confidence: {(result.confidence * 100).toFixed(2)}%
+          </AlertDescription>
+        </Alert>
+      )}
+    </div>
+  );
+};
+
+export default ContentModerationUI;
